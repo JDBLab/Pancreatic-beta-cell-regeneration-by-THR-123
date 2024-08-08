@@ -1,0 +1,173 @@
+# Load necessary libraries
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+
+# Read the Alloxan and THR datasets
+Alloxan.data <- Read10X(data.dir = "C:/Users/mad1188/Box/dKlein/10X3prime03182024/GitAloxan/filtered_feature_bc_matrix")
+THR.data <- Read10X(data.dir = "C:/Users/mad1188/Box/dKlein/10X3primeCellMultiplex2023/reprocessed_06052024/THR-dKlein06262023GeX/filtered_feature_bc_matrix")
+
+# Create Seurat objects for Alloxan and THR datasets
+Alloxan <- CreateSeuratObject(counts = Alloxan.data, project = "Alloxan")
+THR <- CreateSeuratObject(counts = THR.data, project = "THR")
+
+# Rename cells in the datasets
+Alloxan <- RenameCells(object = Alloxan, add.cell.id = "Alloxan")
+THR <- RenameCells(object = THR, add.cell.id = "THR")
+
+# Calculate the percentage of mitochondrial genes
+Alloxan[["percent.mt"]] <- PercentageFeatureSet(object = Alloxan, pattern = "^mt-")
+THR[["percent.mt"]] <- PercentageFeatureSet(object = THR, pattern = "^mt-")
+
+# Plot QC metrics as violin plots
+p1 <- VlnPlot(object = Alloxan, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+p3 <- VlnPlot(object = THR, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+CombinePlots(plots = list(p1, p3), ncol = 1)
+
+# Feature scatter plots for quality control
+p4 <- FeatureScatter(object = Alloxan, feature1 = "nCount_RNA", feature2 = "percent.mt")
+p5 <- FeatureScatter(object = Alloxan, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+p8 <- FeatureScatter(object = THR, feature1 = "nCount_RNA", feature2 = "percent.mt")
+p9 <- FeatureScatter(object = THR, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+CombinePlots(plots = list(p4, p5, p8, p9), ncol = 2)
+
+# Subset the datasets based on QC metrics
+Alloxan <- subset(x = Alloxan, subset = nFeature_RNA > 200 & nFeature_RNA < 8000 & percent.mt < 20)
+THR <- subset(x = THR, subset = nFeature_RNA > 200 & nFeature_RNA < 8000 & percent.mt < 20)
+
+# Further QC metrics after subsetting
+p10 <- VlnPlot(object = Alloxan, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+p12 <- VlnPlot(object = THR, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+CombinePlots(plots = list(p10, p12), ncol = 1)
+
+# Additional feature scatter plots after subsetting
+p13 <- FeatureScatter(object = Alloxan, feature1 = "nCount_RNA", feature2 = "percent.mt")
+p14 <- FeatureScatter(object = Alloxan, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+p17 <- FeatureScatter(object = THR, feature1 = "nCount_RNA", feature2 = "percent.mt")
+p18 <- FeatureScatter(object = THR, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+CombinePlots(plots = list(p13, p14, p17, p18), ncol = 2)
+
+# Combine Alloxan and THR datasets for integration
+ALTH <- c(Alloxan, THR)
+
+# Normalize and find variable features for each dataset
+ALTH.list <- lapply(X = ALTH, FUN = function(x) {
+  x <- NormalizeData(x)
+  x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 3000)
+})
+
+# Select integration features and prepare datasets for integration
+features <- SelectIntegrationFeatures(object.list = ALTH.list)
+ALTH.list <- lapply(X = ALTH.list, FUN = function(x) {
+  x <- ScaleData(x, features = features, verbose = FALSE)
+  x <- RunPCA(x, features = features, verbose = FALSE)
+})
+
+# Find integration anchors and integrate datasets
+ALTH.anchors <- FindIntegrationAnchors(object.list = ALTH.list, anchor.features = features, reduction = "rpca")
+ALTH.combined <- IntegrateData(anchorset = ALTH.anchors)
+
+# Set default assay to integrated and scale data
+DefaultAssay(ALTH.combined) <- "integrated"
+ALTH.combined <- ScaleData(ALTH.combined, verbose = FALSE)
+ALTH.combined <- RunPCA(ALTH.combined, npcs = 30, verbose = FALSE)
+
+# Perform UMAP, find neighbors, and clusters
+ALTH.combined <- RunUMAP(ALTH.combined, reduction = "pca", dims = 1:30)
+ALTH.combined <- FindNeighbors(ALTH.combined, reduction = "pca", dims = 1:30)
+ALTH.combined <- FindClusters(ALTH.combined, resolution = 0.3)
+
+# UMAP plot colored by cluster
+p3 <- DimPlot(ALTH.combined, reduction = "umap", raster = FALSE)
+p4 <- DimPlot(ALTH.combined, reduction = "umap", label = TRUE, raster = FALSE, repel = TRUE)
+p3 + p4
+
+# Find markers for each cluster and save to CSV
+ALTH.markers <- FindAllMarkers(ALTH.combined, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+write.csv(ALTH.markers, 'C:/Users/mad1188/Box/Mayur_shared_JDB/Mouse scRNA seq paper final data/Alloxan_new/ALTH_new.csv')
+
+# Define the new color codes for the clusters
+cluster_colors <- c(
+  "D1" = "#4169E1",    # Navy
+  "H1" = "#006400",    # DarkGreen
+  "MS1" = "#FF8C00",   # DarkOrange
+  "D4" = "#B0E0E6",    # PowderBlue
+  "E" = "#EE82EE",     # Violet
+  "H2" = "#00FF00",    # Lime
+  "A5" = "#D8B698",    # Champagne
+  "A2" = "#A0522D",    # Sienna
+  "A4" = "#CDAD00",    # DarkGoldenrod3
+  "D2.1" = "#7FFFD4",  # Aquamarine
+  "IM" = "#D8BFD8",    # Thistle
+  "M" = "#FFC0CB",     # Pink
+  "F" = "#9370DB",     # MediumPurple
+  "MS2" = "#FFDAB9",   # PeachPuff
+  "IM2" = "#C8A2D6",   # LightLavender
+  "Endoc" = "#FF0000", # Red
+  "D3" = "#008B8B"     # DarkCyan
+)
+
+# Rename the identities in ALTH.combined
+ALTH.combined <- RenameIdents(ALTH.combined, 
+                              `0` = "D1",
+                              `1` = "H1",
+                              `2` = "MS1",
+                              `3` = "D4", 
+                              `4` = "E",
+                              `5` = "H2",
+                              `6` = "A5",
+                              `7` = "A2",
+                              `8` = "A4",
+                              `9` = "D2.1",
+                              `10` = "IM",
+                              `11` = "M",
+                              `12` = "F",
+                              `13` = "MS2",
+                              `14` = "IM2",
+                              `15` = "Endoc",
+                              `16` = "D3"
+)
+
+# Update the CellType column based on the new identities
+ALTH.combined$CellType <- Idents(ALTH.combined)
+
+# Assign colors to factors to ensure they match
+levels(ALTH.combined) <- names(cluster_colors)
+cols <- cluster_colors[levels(ALTH.combined)]
+
+# Plot the UMAP with the updated identifiers and colors
+DimPlot(ALTH.combined, reduction = "umap", group.by = "ident", label = FALSE, pt.size = 1, raster = FALSE, cols = cols)
+
+# Normalize data and perform SCTransform
+DefaultAssay(object = ALTH.combined) <- "RNA"
+ALTH.combined <- NormalizeData(ALTH.combined)
+ALTH.combined <- SCTransform(ALTH.combined, assay = "RNA", new.assay.name = "SCT", verbose = TRUE, return.only.var.genes = TRUE)
+
+# Find markers for each cluster after SCTransform
+DefaultAssay(object = ALTH.combined) <- "SCT"
+Diabetes1.markers <- FindAllMarkers(object = ALTH.combined, 
+                                    features = VariableFeatures(ALTH.combined, assay = 'SCT'), 
+                                    only.pos = TRUE, 
+                                    min.pct = 0.1, 
+                                    logfc.threshold = 0.41, 
+                                    assay = 'SCT',
+                                    slot = c('data'))
+
+# Group by cluster and select top 4 markers by avg_log2FC
+top30.nomes <- Diabetes1.markers %>%
+  group_by(cluster) %>%
+  top_n(n = 4, wt = avg_log2FC)
+
+# Verify top markers
+print(top30.nomes)
+
+# Create heatmap using the top markers
+DoHeatmap(object = ALTH.combined, 
+          features = top30.nomes$gene, 
+          disp.min = -2.5, 
+          disp.max = 2.5, 
+          label = FALSE) + 
+  scale_fill_gradientn(colors = colorRampPalette(c("#0200ad", "#fbfcbd", "#ff0000"))(256))
+
+# Save the combined object for future use
+saveRDS(ALTH.combined, file = "C:/Users/mad1188/Box/Mayur_shared_JDB/Mouse scRNA seq paper final data/Alloxan_new/ALTH_combined.rds")
