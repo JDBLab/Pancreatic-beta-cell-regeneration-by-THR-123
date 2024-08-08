@@ -1,0 +1,155 @@
+# Load necessary libraries
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(magrittr)
+
+# Read the control dataset
+control.data <- Read10X(data.dir = "C:/Users/mad1188/Box/dKlein/10X3primeCellMultiplex2023/reprocessed_09282023/Sample1-dKlein05262023GeX/filtered_feature_bc_matrix")
+
+# Create a Seurat object for the control dataset
+control <- CreateSeuratObject(counts = control.data, project = "control")
+
+# Rename cells in the control dataset
+control <- RenameCells(object = control, add.cell.id = "control")
+
+# Calculate the percentage of mitochondrial genes
+control[["percent.mt"]] <- PercentageFeatureSet(object = control, pattern = "^mt-")
+
+# Plot QC metrics as violin plots
+p1 <- VlnPlot(object = control, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+# Feature scatter plots for quality control
+p4 <- FeatureScatter(object = control, feature1 = "nCount_RNA", feature2 = "percent.mt")
+p5 <- FeatureScatter(object = control, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+CombinePlots(plots = list(p4, p5), ncol = 2)
+
+# Subset the control dataset based on QC metrics
+control <- subset(x = control, subset = nFeature_RNA > 200 & nFeature_RNA < 8000 & percent.mt < 20)
+
+# Normalize the data
+control <- NormalizeData(control, normalization.method = "LogNormalize", scale.factor = 10000)
+
+# Identify highly variable features
+control <- FindVariableFeatures(control, selection.method = "vst", nfeatures = 2000)
+
+# Plot variable features with and without labels
+top10 <- head(VariableFeatures(control), 10)
+plot1 <- VariableFeaturePlot(control)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+
+# Scale the data
+control <- ScaleData(control, features = rownames(control))
+
+# Perform PCA
+control <- RunPCA(control, features = VariableFeatures(object = control))
+
+# Find neighbors and clusters
+control <- FindNeighbors(control, dims = 1:10)
+control <- FindClusters(control, resolution = 0.3)
+
+# Run UMAP for dimensionality reduction
+control <- RunUMAP(control, dims = 1:10)
+
+# UMAP plot colored by cluster
+DimPlot(control, group.by = "seurat_clusters")
+
+# Additional UMAP plots
+p3 <- DimPlot(control, reduction = "umap", raster = FALSE)
+p4 <- DimPlot(control, reduction = "umap", label = TRUE, raster = FALSE, repel = TRUE)
+p3 + p4
+
+# Combine UMAP plots with legends
+p1010 <- DimPlot(object = control, group.by = c("seurat_clusters"), combine = FALSE, pt.size = 1, raster = FALSE, label = TRUE)
+p1010 <- lapply(X = p1010, FUN = function(x) x + theme(legend.position = "top") + guides(color = guide_legend(nrow = 3, byrow = TRUE, override.aes = list(size = 3))))
+CombinePlots(p1010)
+
+# Find markers for each cluster
+control.markers <- FindAllMarkers(control, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+write.csv(control.markers, 'C:/Users/mad1188/Box/Mayur_shared_JDB/Mouse scRNA seq paper final data/New_ALth/control_NEW.csv')
+
+# Define the color codes for control_AD2
+control_AD2_colors <- c(
+  "D1.2" = "#191970",    
+  "MS1" = "#FF8C00",   
+  "H1" = "darkgreen",   
+  "A2" = "sienna3",   
+  "D2" = "turquoise1", 
+  "BETA" = "red",      
+  "MS2" = "#FFDAB9",   
+  "MS3" = "#FDB971",     
+  "A3" = "#A0522D",   
+  "E" = "#EE82EE",     
+  "M" = "#FFC0CB",    
+  "OE" = "grey",    
+  "D3" = "#008B8B"  
+)
+
+# Rename cluster identities
+control_AD2 <- RenameIdents(control, 
+                            `0` = "D1.2",
+                            `1` = "MS1",
+                            `2` = "H1",
+                            `3` = "A2", 
+                            `4` = "D2",
+                            `5` = "BETA",
+                            `6` = "MS2",
+                            `7` = "MS3",
+                            `8` = "A3",
+                            `9` = "E",
+                            `10` = "M",
+                            `11` = "OE",
+                            `12` = "D3"
+)
+
+# Create UMAP plots with custom colors
+DimPlot(control_AD2, reduction = "umap", group.by = "ident", label = FALSE, pt.size = 2, raster = FALSE, cols = control_AD2_colors)
+DimPlot(control_AD2, reduction = "umap", group.by = "ident", label = TRUE, pt.size = 1, raster = TRUE, cols = control_AD2_colors)
+
+# Add cell type information
+control_AD2$CellType <- Idents(control_AD2)
+table(control_AD2$CellType, control_AD2$orig.ident)
+
+# Normalize data and perform SCTransform
+DefaultAssay(object = control_AD2) <- "RNA"
+control_AD2 <- NormalizeData(control_AD2)
+control_AD2 <- SCTransform(control_AD2, assay = "RNA", new.assay.name = "SCT", verbose = TRUE, return.only.var.genes = TRUE)
+
+# Find markers for each cluster after SCTransform
+DefaultAssay(object = control_AD2) <- "SCT"
+Diabetes1.markers <- FindAllMarkers(object = control_AD2, 
+                                    features = VariableFeatures(control_AD2, assay = 'SCT'), 
+                                    only.pos = TRUE, 
+                                    min.pct = 0.1, 
+                                    logfc.threshold = 0.41, 
+                                    assay = 'SCT',
+                                    slot = c('data'))
+
+# Group by cluster and select top 5 markers by avg_log2FC
+top30.nomes <- Diabetes1.markers %>%
+  group_by(cluster) %>%
+  top_n(n = 5, wt = avg_log2FC)
+
+# Verify top markers
+print(top30.nomes)
+
+# Create heatmap using the top markers
+DoHeatmap(object = control_AD2, 
+          features = top30.nomes$gene, 
+          disp.min = -2.5, 
+          disp.max = 2.5, 
+          label = FALSE) + 
+  scale_fill_gradientn(colors = colorRampPalette(c("#0200ad", "#fbfcbd", "#ff0000"))(256))
+
+# Plot expression of specific genes using FeaturePlot
+genes_to_plot <- c("Spp1", "Ins2", "Mecom", "Acta2", "Stmn1", "Tff1", "Vim", "Areg", "Pecam1", "Col3a1", "Lyz2", "Gcg", "Try4")
+for (gene in genes_to_plot) {
+  FeaturePlot(control_AD2, features = gene, min.cutoff = 2, max.cutoff = 8, pt.size = 2, raster = TRUE)
+}
+
+# Subset BETA cells and plot UMAP for these cells
+Beta_Control <- subset(control_AD2, idents = c("BETA"))
+p1010 <- DimPlot(object = Beta_Control, group.by = c("CellType", "orig.ident"), combine = FALSE, pt.size = 1, raster = FALSE, label = TRUE)
+p1010 <- lapply(X = p1010, FUN = function(x) x + theme(legend.position = "top") + guides(color = guide_legend(nrow = 3, byrow = TRUE, override.aes = list(size = 3))))
+CombinePlots(p1010)
