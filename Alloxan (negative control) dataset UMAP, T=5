@@ -1,0 +1,146 @@
+# Load necessary libraries
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(magrittr)
+
+# Read the Alloxan dataset
+Alloxan_new.data <- Read10X(data.dir = "C:/Users/mad1188/Box/dKlein/10X3prime03182024/GitAloxan/filtered_feature_bc_matrix")
+
+# Create a Seurat object for the Alloxan dataset
+Alloxan_new <- CreateSeuratObject(counts = Alloxan_new.data, project = "Alloxan_new")
+
+# Rename cells in the Alloxan dataset
+Alloxan_new <- RenameCells(object = Alloxan_new, add.cell.id = "Alloxan_new")
+
+# Calculate the percentage of mitochondrial genes
+Alloxan_new[["percent.mt"]] <- PercentageFeatureSet(object = Alloxan_new, pattern = "^mt-")
+
+# Plot QC metrics as violin plots
+p1 <- VlnPlot(object = Alloxan_new, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+p1
+
+# Feature scatter plots for quality control
+p4 <- FeatureScatter(object = Alloxan_new, feature1 = "nCount_RNA", feature2 = "percent.mt")
+p5 <- FeatureScatter(object = Alloxan_new, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+CombinePlots(plots = list(p4, p5), ncol = 2)
+
+# Subset the Alloxan dataset based on QC metrics
+Alloxan_new <- subset(x = Alloxan_new, subset = nFeature_RNA > 200 & nFeature_RNA < 8000 & percent.mt < 20)
+
+# Plot QC metrics after subsetting
+p10 <- VlnPlot(object = Alloxan_new, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+CombinePlots(plots = list(p10), ncol = 1)
+
+# Additional feature scatter plots
+p13 <- FeatureScatter(object = Alloxan_new, feature1 = "nCount_RNA", feature2 = "percent.mt")
+p14 <- FeatureScatter(object = Alloxan_new, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+CombinePlots(plots = list(p13, p14), ncol = 2)
+
+# Normalize the data
+Alloxan_new <- NormalizeData(Alloxan_new, normalization.method = "LogNormalize", scale.factor = 10000)
+
+# Identify highly variable features
+Alloxan_new <- FindVariableFeatures(Alloxan_new, selection.method = "vst", nfeatures = 2000)
+
+# Plot variable features with and without labels
+top10 <- head(VariableFeatures(Alloxan_new), 10)
+plot1 <- VariableFeaturePlot(Alloxan_new)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+
+# Scale the data
+Alloxan_new <- ScaleData(Alloxan_new, features = rownames(Alloxan_new))
+
+# Perform PCA
+Alloxan_new <- RunPCA(Alloxan_new, features = VariableFeatures(object = Alloxan_new))
+
+# Find neighbors and clusters
+Alloxan_new <- FindNeighbors(Alloxan_new, dims = 1:30)
+Alloxan_new <- FindClusters(Alloxan_new, resolution = 0.3)
+
+# Run UMAP for dimensionality reduction
+Alloxan_new <- RunUMAP(Alloxan_new, dims = 1:30)
+
+# UMAP plot colored by cluster
+DimPlot(Alloxan_new, group.by = "seurat_clusters")
+
+# Additional UMAP plots
+p3 <- DimPlot(Alloxan_new, reduction = "umap", raster = FALSE)
+p4 <- DimPlot(Alloxan_new, reduction = "umap", label = TRUE, raster = FALSE, repel = TRUE)
+p3 + p4
+
+# Combine UMAP plots with legends
+p1010 <- DimPlot(object = Alloxan_new, group.by = c("seurat_clusters"), combine = FALSE, pt.size = 1, raster = FALSE, label = TRUE)
+p1010 <- lapply(X = p1010, FUN = function(x) x + theme(legend.position = "top") + guides(color = guide_legend(nrow = 3, byrow = TRUE, override.aes = list(size = 3))))
+CombinePlots(p1010)
+
+# Find markers for each cluster
+cluster.markers_Alloxan_new <- FindAllMarkers(Alloxan_new, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+write.csv(cluster.markers_Alloxan_new, 'C:/Users/mad1188/Box/Mayur_shared_JDB/Mouse scRNA seq paper final data/Alloxan_new/Alloxan_new_NEW.csv')
+
+# Define customized colors for Alloxan_new_AD identifiers
+Alloxan_new_AD_colors <- c("D1" = "#4169E1",  
+                           "A1" = "#EEDD82",  
+                           "A3" = "#A0522D", 
+                           "D2" = "turquoise1",  
+                           "MS3" = "#FDB971", 
+                           "A2" = "sienna3",  
+                           "A4" = "gold3")
+
+# Update the cell type identifiers in Alloxan_new_AD
+Alloxan_new_AD <- RenameIdents(Alloxan_new, 
+                               `0` = "D1",
+                               `1` = "A1",
+                               `2` = "A3",
+                               `3` = "D2",
+                               `4` = "MS3",
+                               `5` = "A2",
+                               `6` = "A4")
+
+# UMAP plot with custom colors and labels
+DimPlot(Alloxan_new_AD, label = TRUE, raster = FALSE, cols = Alloxan_new_AD_colors)
+
+# UMAP plot with custom colors and no labels
+DimPlot(Alloxan_new_AD, label = FALSE, raster = FALSE, cols = Alloxan_new_AD_colors, pt.size = 5)
+
+# Add cell type information
+Alloxan_new_AD$CellType <- Idents(Alloxan_new_AD)
+table(Alloxan_new_AD$CellType)
+
+# Normalize data and perform SCTransform
+DefaultAssay(object = Alloxan_new_AD) <- "RNA"
+Alloxan_new_AD <- NormalizeData(Alloxan_new_AD)
+Alloxan_new_AD <- SCTransform(Alloxan_new_AD, assay = "RNA", new.assay.name = "SCT", verbose = TRUE, return.only.var.genes = TRUE)
+
+# Find markers for each cluster after SCTransform
+DefaultAssay(object = Alloxan_new_AD) <- "SCT"
+Diabetes1.markers <- FindAllMarkers(object = Alloxan_new_AD, 
+                                    features = VariableFeatures(Alloxan_new_AD, assay = 'SCT'), 
+                                    only.pos = TRUE, 
+                                    min.pct = 0.1, 
+                                    logfc.threshold = 0.41, 
+                                    assay = 'SCT',
+                                    slot = c('data'))
+
+# Group by cluster and select top 5 markers by avg_log2FC
+top30.nomes <- Diabetes1.markers %>%
+  group_by(cluster) %>%
+  top_n(n = 5, wt = avg_log2FC)
+
+# Verify top markers
+print(top30.nomes)
+
+# Create heatmap using the top markers
+DoHeatmap(object = Alloxan_new_AD, 
+          features = top30.nomes$gene, 
+          disp.min = -2.5, 
+          disp.max = 2.5, 
+          label = FALSE) + 
+  scale_fill_gradientn(colors = colorRampPalette(c("#0200ad", "#fbfcbd", "#ff0000"))(256))
+
+# Plot expression of specific genes using FeaturePlot
+genes_to_plot <- c("Spp1", "Ins2", "Mecom", "Acta2", "Stmn1", "Tff1", "Vim", "Areg", "Pecam1", "Col3a1", "Lyz2", "Gcg", "Try4", "Reg1", "Pnlip", "Ctrb1")
+for (gene in genes_to_plot) {
+  FeaturePlot(Alloxan_new_AD, features = gene, min.cutoff = 2, max.cutoff = 8, pt.size = 2, raster = TRUE)
+}
