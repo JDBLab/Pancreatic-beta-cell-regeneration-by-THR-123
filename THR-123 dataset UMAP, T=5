@@ -1,0 +1,290 @@
+# Load necessary libraries
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(magrittr)
+
+# Read the THR dataset
+THR.data <- Read10X(data.dir = "C:/Users/mad1188/Box/dKlein/10X3primeCellMultiplex2023/reprocessed_06052024/THR-dKlein06262023GeX/filtered_feature_bc_matrix")
+
+# Create a Seurat object for the THR dataset
+THR <- CreateSeuratObject(counts = THR.data, project = "THR")
+
+# Rename cells in the THR dataset
+THR <- RenameCells(object = THR, add.cell.id = "THR")
+
+# Calculate the percentage of mitochondrial genes
+THR[["percent.mt"]] <- PercentageFeatureSet(object = THR, pattern = "^mt-")
+
+# Plot QC metrics as violin plots
+p1 <- VlnPlot(object = THR, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+p1
+
+# Feature scatter plots for quality control
+p4 <- FeatureScatter(object = THR, feature1 = "nCount_RNA", feature2 = "percent.mt")
+p5 <- FeatureScatter(object = THR, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+CombinePlots(plots = list(p4, p5), ncol = 2)
+
+# Subset the THR dataset based on QC metrics
+THR <- subset(x = THR, subset = nFeature_RNA > 200 & nFeature_RNA < 8000 & percent.mt < 20)
+
+# Plot QC metrics after subsetting
+p10 <- VlnPlot(object = THR, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+CombinePlots(plots = list(p10), ncol = 1)
+
+# Additional feature scatter plots
+p13 <- FeatureScatter(object = THR, feature1 = "nCount_RNA", feature2 = "percent.mt")
+p14 <- FeatureScatter(object = THR, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+CombinePlots(plots = list(p13, p14), ncol = 2)
+
+# Normalize the data
+THR <- NormalizeData(THR, normalization.method = "LogNormalize", scale.factor = 10000)
+
+# Identify highly variable features
+THR <- FindVariableFeatures(THR, selection.method = "vst", nfeatures = 2000)
+
+# Plot variable features with and without labels
+top10 <- head(VariableFeatures(THR), 10)
+plot1 <- VariableFeaturePlot(THR)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+
+# Scale the data
+THR <- ScaleData(THR, features = rownames(THR))
+
+# Perform PCA
+THR <- RunPCA(THR, features = VariableFeatures(object = THR))
+
+# Find neighbors and clusters
+THR <- FindNeighbors(THR, dims = 1:10)
+THR <- FindClusters(THR, resolution = 0.3)
+
+# Run UMAP for dimensionality reduction
+THR <- RunUMAP(THR, dims = 1:10)
+
+# UMAP plot colored by cluster
+DimPlot(THR, group.by = "seurat_clusters")
+
+# Additional UMAP plots
+p3 <- DimPlot(THR, reduction = "umap", raster = FALSE)
+p4 <- DimPlot(THR, reduction = "umap", label = TRUE, raster = FALSE, repel = TRUE)
+p3 + p4
+
+# Combine UMAP plots with legends
+p1010 <- DimPlot(object = THR, group.by = c("seurat_clusters"), combine = FALSE, pt.size = 1, raster = FALSE, label = TRUE)
+p1010 <- lapply(X = p1010, FUN = function(x) x + theme(legend.position = "top") + guides(color = guide_legend(nrow = 3, byrow = TRUE, override.aes = list(size = 3))))
+CombinePlots(p1010)
+
+# Find markers for each cluster
+THR.markers <- FindAllMarkers(THR, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+write.csv(THR.markers, 'C:/Users/mad1188/Box/Mayur_shared_JDB/Mouse scRNA seq paper final data/New_ALth/THR_NEW.csv')
+
+# Define the color codes for THR_AD2
+THR_AD2_colors <- c(
+  "D1" = "#4169E1",    
+  "H1" = "DARKGREEN",    
+  "MS1" = "#FF8C00",  
+  "E" = "#EE82EE",     
+  "H2" = "green",      
+  "A2" = "sienna3",   
+  "A3" = "#A0522D",     
+  "IM" = "#D8BFD8",    
+  "M" = "#FFC0CB",     
+  "MS2" = "#FFDAB9",   
+  "Endoc" = "red", 
+  "D3" = "#008B8B",    
+  "D1.2" = "#4169E1"     
+)
+
+# Update the cell type identifiers in THR_AD2
+THR_AD2 <- RenameIdents(THR, 
+                        `0` = "D1.2",
+                        `1` = "MS1",
+                        `2` = "H1",
+                        `3` = "D1", 
+                        `4` = "E",
+                        `5` = "H2",
+                        `6` = "A2",
+                        `7` = "A3",
+                        `8` = "IM",
+                        `9` = "M",
+                        `10` = "MS2",
+                        `11` = "Endoc",
+                        `12` = "D3"
+)
+
+# UMAP plot with custom colors and labels
+DimPlot(THR_AD2, reduction = "umap", group.by = "ident", label = FALSE, pt.size = 1, raster = FALSE, cols = THR_AD2_colors)
+DimPlot(THR_AD2, reduction = "umap", group.by = "ident", label = TRUE, pt.size = 1, raster = TRUE, cols = THR_AD2_colors)
+
+# Add cell type information
+THR_AD2$CellType <- Idents(THR_AD2)
+
+# Display the cell type distribution
+table(THR_AD2$CellType, THR_AD2$orig.ident)
+
+# Normalize data and perform SCTransform
+DefaultAssay(object = THR_AD2) <- "RNA"
+THR_AD2 <- NormalizeData(THR_AD2)
+THR_AD2 <- SCTransform(THR_AD2, assay = "RNA", new.assay.name = "SCT", verbose = TRUE, return.only.var.genes = TRUE)
+
+# Find markers for each cluster after SCTransform
+DefaultAssay(object = THR_AD2) <- "SCT"
+Diabetes1.markers <- FindAllMarkers(object = THR_AD2, 
+                                    features = VariableFeatures(THR_AD2, assay = 'SCT'), 
+                                    only.pos = TRUE, 
+                                    min.pct = 0.1, 
+                                    logfc.threshold = 0.41, 
+                                    assay = 'SCT',
+                                    slot = c('data'))
+
+# Group by cluster and select top 5 markers by avg_log2FC
+top30.nomes <- Diabetes1.markers %>%
+  group_by(cluster) %>%
+  top_n(n = 5, wt = avg_log2FC)
+
+# Verify top markers
+print(top30.nomes)
+
+# Create heatmap using the top markers
+DoHeatmap(object = THR_AD2, 
+          features = top30.nomes$gene, 
+          disp.min = -2.5, 
+          disp.max = 2.5, 
+          label = FALSE) + 
+  scale_fill_gradientn(colors = colorRampPalette(c("#0200ad", "#fbfcbd", "#ff0000"))(256))
+
+# List of genes to plot in THR_AD2
+genes_to_plot <- c("Spp1", "Areg", "Pnlip", "Mecom", "Krt17", "Pecam1", "Acta2", 
+                   "Gm26917", "Cd52", "Stmn1", "Lyz2", "Col3a1", "Iapp", "Try4")
+
+# Generate FeaturePlots for the specified markers in the THR_AD2 object
+for (gene in genes_to_plot) {
+  p <- FeaturePlot(THR_AD2, features = gene, reduction = "umap", pt.size = 2, min.cutoff = 0, max.cutoff = 8) +
+    ggtitle(paste("Expression of", gene, "in THR_AD2")) +
+    theme(plot.title = element_text(hjust = 0.5))
+  print(p)
+}
+
+# Subset hybrid clusters H1 and H2 from THR_AD2
+HYBRID_THR_AD2 <- subset(THR_AD2, idents = c("H1", "H2"))
+
+# UMAP plot for hybrid clusters H1 and H2
+p1010 <- DimPlot(object = HYBRID_THR_AD2, group.by = c("orig.ident", "CellType"), combine = FALSE, pt.size = 1, raster = FALSE, label = TRUE)
+p1010 <- lapply(X = p1010, FUN = function(x) x + theme(legend.position = "top") + guides(color = guide_legend(nrow = 3, byrow = TRUE, override.aes = list(size = 3))))
+CombinePlots(p1010)
+
+# Normalize data for hybrid clusters
+DefaultAssay(object = HYBRID_THR_AD2) <- "RNA"
+HYBRID_THR_AD2 <- NormalizeData(HYBRID_THR_AD2)
+
+# Specify the genes of interest for violin plots
+genes_to_plot4 <- c("Ins2", "Iapp", "Chga")
+genes_to_plot5 <- c("Chgb", "Pyy", "Scg2")
+genes_to_plot6 <- c("Scg3")
+
+# Create violin plots using the normalized data
+VlnPlot(HYBRID_THR_AD2, features = genes_to_plot4, log = TRUE, split.by = "CellType", 
+        ncol = 3, pt.size = 2, slot = "data")
+
+# Alternatively, create violin plots using raw counts data
+VlnPlot(HYBRID_THR_AD2, features = genes_to_plot5, log = TRUE, split.by = "CellType", 
+        ncol = 3, pt.size = 1, slot = "counts") +
+  theme_minimal() +
+  ggtitle("Raw Count Expression Comparison of Selected Genes in H1 and H2 CellTypes in HYBRID_THR_AD2")
+
+# Subset H2 cluster from THR_AD2 and H1 cluster from control_AD2
+H2_THR_AD2 <- subset(THR_AD2, idents = c("H2"))
+H1_control_AD2 <- subset(control_AD2, idents = c("H1"))
+
+# Merge the two subsets into a single Seurat object
+combined_cells <- merge(H2_THR_AD2, y = H1_control_AD2, add.cell.ids = c("H2", "H1"))
+
+# UMAP plot for the combined subsets
+p1010 <- DimPlot(object = combined_cells, group.by = c("orig.ident", "CellType"), combine = FALSE, pt.size = 1, raster = FALSE, label = TRUE)
+p1010 <- lapply(X = p1010, FUN = function(x) x + theme(legend.position = "top") + guides(color = guide_legend(nrow = 3, byrow = TRUE, override.aes = list(size = 3))))
+CombinePlots(p1010)
+
+# Load necessary libraries
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+
+# Assuming Endoc_THR_AD2 is already properly initialized and processed
+
+# Subset Endoc_THR_AD2 to get cells expressing Ins2, Gcg, Sst, and Ppy genes
+genes_to_check <- c("Ins2", "Gcg", "Sst", "Ppy")
+thresholds <- c(Ins2 = 1, Gcg = 2, Sst = 2, Ppy = 5)
+
+for (gene in genes_to_check) {
+  cells_expressing_gene <- WhichCells(Endoc_THR_AD2, expression = eval(parse(text = paste0(gene, " > ", thresholds[[gene]]))))
+  Endoc_THR_AD2_gene <- subset(Endoc_THR_AD2, cells = cells_expressing_gene)
+  
+  # Add barcode and UMAP coordinates
+  Endoc_THR_AD2_gene$barcode <- colnames(Endoc_THR_AD2_gene)
+  Endoc_THR_AD2_gene$UMAP_1 <- Endoc_THR_AD2_gene@reductions$umap@cell.embeddings[,1]
+  Endoc_THR_AD2_gene$UMAP_2 <- Endoc_THR_AD2_gene@reductions$umap@cell.embeddings[,2]
+  
+  # Write metadata to CSV
+  write.csv(Endoc_THR_AD2_gene@meta.data, file=paste0('Endoc_THR_AD2_', gene, '_metadata.csv'), quote=F, row.names=F)
+  
+  # Generate FeaturePlot for the gene
+  FeaturePlot(Endoc_THR_AD2_gene, features = gene, reduction = "umap", blend = TRUE, blend.threshold = 0.5, combine = TRUE, pt.size = 2, raster = FALSE)
+}
+
+# Plot individual gene FeaturePlots for Endoc_THR_AD2
+for (gene in genes_to_check) {
+  FeaturePlot(Endoc_THR_AD2, features = gene, reduction = "umap", pt.size = 2, raster = FALSE)
+}
+
+# Additional processing and UMAP plots
+DefaultAssay(object = Endoc_THR_AD2) <- "integrated"
+Endoc_THR_AD2 <- RunPCA(object = Endoc_THR_AD2, features = VariableFeatures(object = Endoc_THR_AD2))
+VizDimLoadings(object = Endoc_THR_AD2, dims = 1:2, reduction = "pca")
+DimPlot(object = Endoc_THR_AD2, reduction = "pca")
+DimHeatmap(object = Endoc_THR_AD2, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(object = Endoc_THR_AD2, dims = 1:15, cells = 500, balanced = TRUE)
+ElbowPlot(object = Endoc_THR_AD2)
+Endoc_THR_AD2 <- FindNeighbors(object = Endoc_THR_AD2, dims = 1:20)
+
+# Find clusters
+Endoc_THR_AD2RE <- FindClusters(object = Endoc_THR_AD2, resolution = 0.8)
+
+# UMAP plot for clusters
+Endoc_THR_AD2RE <- RunUMAP(Endoc_THR_AD2RE, dims = 1:30)
+p1010 <- DimPlot(object = Endoc_THR_AD2RE, group.by = c("seurat_clusters", "orig.ident"), combine = FALSE, pt.size = 4, raster = FALSE, label = TRUE)
+p1010 <- lapply(X = p1010, FUN = function(x) x + theme(legend.position = "top") + guides(color = guide_legend(nrow = 3, byrow = TRUE, override.aes = list(size = 5))))
+CombinePlots(p1010)
+
+# Find markers for THR_Endoc_RE clusters
+THR_Endoc_RE.markers <- FindAllMarkers(Endoc_THR_AD2RE, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+write.csv(THR_Endoc_RE.markers, 'C:/Users/mad1188/Box/Mayur_shared_JDB/Final_mouseRNA seq data files/Control t=0/THR_Endoc_RE.markers.csv')
+
+# Rename clusters and assign colors
+new_cluster_ids <- c("alpha cells", "beta cells", "delta cells")
+names(new_cluster_ids) <- levels(Endoc_THR_AD2RE)
+Endoc_THR_AD2RE <- RenameIdents(Endoc_THR_AD2RE, new_cluster_ids)
+
+cluster_colors <- c("alpha cells" = "green", "beta cells" = "red", "delta cells" = "violet")
+
+# Plot the UMAP with the new cluster names and colors
+p1010 <- DimPlot(Endoc_THR_AD2RE, group.by = "ident", cols = cluster_colors, pt.size = 8, raster = FALSE, label = FALSE) +
+  theme(legend.position = "top") +
+  guides(color = guide_legend(nrow = 3, byrow = TRUE, override.aes = list(size = 5)))
+
+print(p1010)
+
+# Add cluster IDs to metadata and save
+Endoc_THR_AD2RE$new_cluster_ids <- Idents(Endoc_THR_AD2RE)
+Endoc_THR_AD2RE$barcode <- colnames(Endoc_THR_AD2RE)
+Endoc_THR_AD2RE$UMAP_1 <- Endoc_THR_AD2RE@reductions$umap@cell.embeddings[,1]
+Endoc_THR_AD2RE$UMAP_2 <- Endoc_THR_AD2RE@reductions$umap@cell.embeddings[,2]
+write.csv(Endoc_THR_AD2RE@meta.data, file='Endoc_THR_AD2RE_metadata.csv', quote=F, row.names=F)
+
+# Subset beta cells
+THR_betacells <- subset(Endoc_THR_AD2RE, idents = c("beta cells"))
+
+# UMAP plot for beta cells
+p1010 <- DimPlot(object = THR_betacells, group.by = c("orig.ident", "new_cluster_ids"), combine = FALSE, pt.size = 1, raster = FALSE, label = TRUE)
+p1010 <- lapply(X = p1010, FUN = function(x) x + theme(legend.position = "top") + guides(color = guide_legend(nrow = 3, byrow = TRUE, override.aes = list(size = 3))))
+CombinePlots(p1010)
