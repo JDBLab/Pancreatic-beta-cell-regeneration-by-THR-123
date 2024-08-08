@@ -1,0 +1,162 @@
+# Title: Subsetting, Reclustering, and Differential Expression Analysis of scRNA-seq Data from Alloxan and THR Treated Cells
+
+# Load necessary libraries
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+
+# Subset seurat_cluster1 from ALTH.combined_PRORE
+seurat_cluster1 <- subset(ALTH.combined_PRORE, idents = "1")
+head(x = seurat_cluster1[[]])
+
+# Create UMAP plot using ggplot2
+umap_plot <- DimPlot(seurat_cluster1, reduction = "umap", group.by = "seurat_clusters", label = TRUE, pt.size = 4) +
+  theme(legend.position = "top") +
+  guides(color = guide_legend(nrow = 3, byrow = TRUE, override.aes = list(size = 5)))
+
+print(umap_plot)
+
+# Interactive hover information using HoverLocator
+HoverLocator(plot = umap_plot, information = FetchData(seurat_cluster1, vars = c("seurat_clusters", "nCount_RNA")))
+
+# Select cells interactively using CellSelector
+selected_cells <- CellSelector(plot = umap_plot)
+
+# Print the head of the selected cells
+head(selected_cells)
+
+# Update the identities of the selected cells to "Endoc1"
+Idents(seurat_cluster1, cells = selected_cells) <- "Endoc1"
+
+# Save the selected cells to a CSV file
+write.csv(selected_cells, 'C:/Users/mad1188/Box/Mayur_shared_JDB/Final_mouseRNA seq data files/excel files for UMAPs cluster analysis/Endoc1.csv')
+
+# Select cells interactively using CellSelector for "Endoc2"
+selected_cells <- CellSelector(plot = umap_plot)
+
+# Print the head of the selected cells
+head(selected_cells)
+
+# Update the identities of the selected cells to "Endoc2"
+Idents(seurat_cluster1, cells = selected_cells) <- "Endoc2"
+
+# Save the selected cells to a CSV file
+write.csv(selected_cells, 'C:/Users/mad1188/Box/Mayur_shared_JDB/Final_mouseRNA seq data files/excel files for UMAPs cluster analysis/Endoc2.csv')
+
+# Add EndocInfo metadata to seurat_cluster1
+seurat_cluster1$EndocInfo <- NA
+seurat_cluster1$EndocInfo[selected_cells] <- "Endoc1"
+seurat_cluster1$EndocInfo[selected_cells] <- "Endoc2"
+seurat_cluster1RE$EndocInfo <- Idents(seurat_cluster1)
+seurat_cluster1RE$integrated_snn_res.0.4 <- Idents(seurat_cluster1)
+seurat_cluster1$integrated_snn_res.0.4 <- Idents(seurat_cluster1RE)
+
+head(x = seurat_cluster1RE[[]])
+head(x = seurat_cluster1[[]])
+
+table(seurat_cluster1RE$seurat_clusters, seurat_cluster1RE$orig.ident)
+
+# Set default assay to "integrated" and perform PCA
+DefaultAssay(object = seurat_cluster1) <- "integrated"
+seurat_cluster1 <- RunPCA(object = seurat_cluster1, features = VariableFeatures(object = seurat_cluster1))
+print(x = seurat_cluster1[["pca"]], dims = 1:5, nfeatures = 5)
+VizDimLoadings(object = seurat_cluster1, dims = 1:2, reduction = "pca")
+DimPlot(object = seurat_cluster1, reduction = "pca")
+DimHeatmap(object = seurat_cluster1, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(object = seurat_cluster1, dims = 1:15, cells = 500, balanced = TRUE)
+ElbowPlot(object = seurat_cluster1)
+
+# Find neighbors and clusters
+seurat_cluster1 <- FindNeighbors(object = seurat_cluster1, dims = 1:20)
+seurat_cluster1RE <- FindClusters(object = seurat_cluster1, resolution = 0.4)
+seurat_cluster1RE <- RunUMAP(seurat_cluster1RE, dims = 1:30)
+
+# Plot UMAP with cluster information
+p1010 <- DimPlot(object = seurat_cluster1RE, group.by = c("seurat_clusters"), combine = FALSE, pt.size = 5, raster = FALSE, label = FALSE)
+p1010 <- lapply(X = p1010, FUN = function(x) x + theme(legend.position = "top") + guides(color = guide_legend(nrow = 3, byrow = TRUE, override.aes = list(size = 3))))
+CombinePlots(p1010)
+
+# Find markers for the reclustered data and save to CSV
+seurat_cluster1RE.markers <- FindAllMarkers(seurat_cluster1RE, only.pos = TRUE, min.pct = 0, logfc.threshold = 0)
+write.csv(seurat_cluster1RE.markers, 'C:/Users/mad1188/Box/Mayur_shared_JDB/Final_mouseRNA seq data files/excel files for UMAPs cluster analysis/seurat_cluster1RE.csv')
+
+# Subset seurat_cluster0 from seurat_cluster1RE
+seurat_cluster0 <- subset(seurat_cluster1RE, idents = "0")
+head(x = seurat_cluster0[[]])
+
+# Set default assay to "RNA" and normalize data
+DefaultAssay(object = seurat_cluster0) <- "RNA"
+seurat_cluster0 <- NormalizeData(object = seurat_cluster0)
+
+# Perform SCTransform for better normalization and variance stabilization
+seurat_cluster0 <- SCTransform(object = seurat_cluster0, assay = "RNA", new.assay.name = "SCT", verbose = TRUE, return.only.var.genes = TRUE)
+DefaultAssay(object = seurat_cluster0) <- "SCT"
+
+# Ensure the identities are set in the Seurat object metadata
+Idents(seurat_cluster0) <- seurat_cluster0$EndocInfo
+
+# Define markers for comparison
+marker_genes <- c("Spp1", "Tff1", "Tff2", "Chga", "Ins2", "Gcg", "Sst", "Ppy")
+
+# Generate violin plots for the specified markers
+for (gene in marker_genes) {
+  p <- VlnPlot(seurat_cluster0, features = gene, group.by = "EndocInfo", pt.size = 0.5) +
+    ggtitle(paste("Expression of", gene, "in Endoc1 vs Endoc2")) +
+    theme(plot.title = element_text(hjust = 0.5))
+  print(p)
+}
+
+# Save metadata for RNA velocity analysis
+seurat_cluster1RE$barcode <- colnames(seurat_cluster1RE)
+seurat_cluster1RE$UMAP_1 <- seurat_cluster1RE@reductions$umap@cell.embeddings[,1]
+seurat_cluster1RE$UMAP_2 <- seurat_cluster1RE@reductions$umap@cell.embeddings[,2]
+write.csv(seurat_cluster1RE@meta.data, file='C:/Users/mad1188/Box/Mayur_shared_JDB/Final_mouseRNA seq data files/Control t=0/seurat_cluster1RE_metadata_updated.csv', quote=F, row.names=F)
+
+# Merge beta cells from control_AD2 with Endoc1 and Endoc2 cells from seurat_cluster0
+Beta_Control <- subset(control_AD2, idents = "BETA")
+Endoc1_cells <- subset(seurat_cluster0, idents = "Endoc1")
+Endoc2_cells <- subset(seurat_cluster0, idents = "Endoc2")
+combined_cells <- merge(Beta_Control, y = list(Endoc1_cells, Endoc2_cells), add.cell.ids = c("Beta", "Endoc1", "Endoc2"))
+
+# Normalize and perform SCTransform on the combined cells
+DefaultAssay(combined_cells) <- "RNA"
+combined_cells <- NormalizeData(combined_cells)
+combined_cells <- SCTransform(combined_cells, assay = "RNA", new.assay.name = "SCT", verbose = TRUE, return.only.var.genes = TRUE)
+DefaultAssay(combined_cells) <- "SCT"
+
+# Set the identities for the combined object
+combined_cells$celltype <- Idents(combined_cells)
+Idents(combined_cells) <- combined_cells$celltype
+
+# List of marker genes to compare
+marker_genes <- c("Gck", "Ins2", "Abcc8", "Slc2a2")
+
+# Generate violin plots comparing Beta and Endoc1, and Beta and Endoc2
+for (gene in marker_genes) {
+  p <- VlnPlot(combined_cells, features = gene, pt.size = 2, split.by = "celltype", slot = "data") +
+    ggtitle(paste("Expression of", gene, "in Beta, Endoc1, and Endoc2")) +
+    theme(plot.title = element_text(hjust = 0.5))
+  print(p)
+}
+
+# Perform differential expression analysis using FindMarkers
+markers_Endoc1_vs_Beta <- FindMarkers(combined_cells, ident.1 = "Endoc1", ident.2 = "BETA", assay = "SCT", features = marker_genes)
+markers_Endoc2_vs_Beta <- FindMarkers(combined_cells, ident.1 = "Endoc2", ident.2 = "BETA", assay = "SCT", features = marker_genes)
+
+# Print the results
+print(markers_Endoc1_vs_Beta)
+print(markers_Endoc2_vs_Beta)
+
+# Save the differential expression results to CSV files
+write.csv(markers_Endoc1_vs_Beta, file='C:/Users/mad1188/Box/Mayur_shared_JDB/Final_mouseRNA seq data files/excel files for UMAPs cluster analysis/Endoc1_vs_Beta.csv', quote = FALSE, row.names = TRUE)
+write.csv(markers_Endoc2_vs_Beta, file='C:/Users/mad1188/Box/Mayur_shared_JDB/Final_mouseRNA seq data files/excel files for UMAPs cluster analysis/Endoc2_vs_Beta.csv', quote = FALSE, row.names = TRUE)
+
+# Save the expression counts matrix
+out_data_dir="C:/Users/mad1188/Box/Mayur_shared_JDB/Final_mouseRNA seq data files/Control t=0/"
+library(Matrix)
+counts_matrix <- GetAssayData(combined_cells, assay='RNA', slot='counts')
+writeMM(counts_matrix, file=paste0(out_data_dir, 'seurat_cluster1RE_counts.mtx'))
+
+# Save the final Seurat object for future use
+saveRDS(combined_cells, file = "C:/Users/mad1188/Box/Mayur_shared_JDB/Final_mouseRNA seq data files/Control t=0/combined_cells.rds")
