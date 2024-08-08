@@ -1,0 +1,24 @@
+#For RNA Velocity
+ALTH.combined_PRORE$barcode <- colnames(ALTH.combined_PRORE)
+ALTH.combined_PRORE$UMAP_1 <- ALTH.combined_PRORE@reductions$umap@cell.embeddings[,1]
+ALTH.combined_PRORE$UMAP_2 <- ALTH.combined_PRORE@reductions$umap@cell.embeddings[,2]
+write.csv(ALTH.combined_PRORE@meta.data, file='ALTH.combined_PRORE_metadata1.csv', quote=F, row.names=F)
+
+DefaultAssay(object = ALTH.combined_PRORE) <- "RNA"
+ALTH.combined_PRORE <- NormalizeData(ALTH.combined_PRORE)
+ALTH.combined_PRORE <- SCTransform(ALTH.combined_PRORE, assay = "RNA", new.assay.name = "SCT", verbose = TRUE, return.only.var.genes = TRUE)
+
+
+out_data_dir="C:/Users/mad1188/Box/Mayur_shared_JDB/Final_mouseRNA seq data files/excel files for UMAPs cluster analysis/updated Prore/"
+# write expression counts matrix
+library(Matrix)
+counts_matrix <- GetAssayData(ALTH.combined_PRORE, assay='RNA', slot='counts')
+writeMM(counts_matrix, file=paste0(out_data_dir, 'ALTH.combined_PRORE_counts1.mtx'))
+
+# write dimesnionality reduction matrix, in this example case pca matrix
+write.csv(ALTH.combined_PRORE@reductions$pca@cell.embeddings, file='ALTH.combined_PRORE_pca1.csv', quote=F,row.names=F)
+
+# write gene names
+write.table(
+  data.frame('gene'=rownames(counts_matrix)),file='ALTH.combined_PRORE_gene_names1.csv', quote=F,row.names=F,col.names=F)
+
