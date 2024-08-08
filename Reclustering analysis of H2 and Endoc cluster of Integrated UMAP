@@ -1,1 +1,54 @@
+# Load necessary libraries
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+
+# Subsetting and reclustering analysis for new AD with Endoc clusters
+# Subset the ALTH.combined object to include only "Endoc" and "H2" clusters
+ALTH.combined_PRO <- subset(ALTH.combined, idents = c("Endoc", "H2"))
+head(x = ALTH.combined_PRO[[]])
+table(Idents(ALTH.combined_PRO))
+
+# Plot UMAP of the subsetted clusters
+DimPlot(ALTH.combined_PRO, reduction = "umap", group.by = "ident", label = TRUE, pt.size = 1, raster = FALSE, cols = cols)
+
+# Display cell type distribution
+table(ALTH.combined_PRO$CellType)
+
+# Set the default assay to "integrated"
+DefaultAssay(object = ALTH.combined_PRO) <- "integrated"
+
+# Perform PCA on the subsetted data
+ALTH.combined_PRO <- RunPCA(object = ALTH.combined_PRO, features = VariableFeatures(object = ALTH.combined_PRO))
+print(x = ALTH.combined_PRO[["pca"]], dims = 1:5, nfeatures = 5)
+VizDimLoadings(object = ALTH.combined_PRO, dims = 1:2, reduction = "pca")
+DimPlot(object = ALTH.combined_PRO, reduction = "pca")
+DimHeatmap(object = ALTH.combined_PRO, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(object = ALTH.combined_PRO, dims = 1:15, cells = 500, balanced = TRUE)
+ElbowPlot(object = ALTH.combined_PRO)
+
+# Find neighbors and clusters
+ALTH.combined_PRO <- FindNeighbors(object = ALTH.combined_PRO, dims = 1:20)
+ALTH.combined_PRORE <- FindClusters(object = ALTH.combined_PRO, resolution = 0.1)
+
+# Display cluster distribution
+table(ALTH.combined_PRORE$seurat_clusters)
+table(Idents(ALTH.combined_PRORE), ALTH.combined_PRORE$orig.ident)
+
+# Perform UMAP on the reclustered data
+ALTH.combined_PRORE <- RunUMAP(ALTH.combined_PRORE, dims = 1:30)
+
+# Plot UMAP with cluster and original identity information
+p1010 <- DimPlot(object = ALTH.combined_PRORE, group.by = c("seurat_clusters", "orig.ident"), combine = FALSE, pt.size = 4, raster = FALSE, label = FALSE)
+p1010 <- lapply(X = p1010, FUN = function(x) x + theme(legend.position = "top") + guides(color = guide_legend(nrow = 3, byrow = TRUE, override.aes = list(size = 5))))
+CombinePlots(p1010)
+
+# Plot UMAP with only cluster information
+p1010 <- DimPlot(object = ALTH.combined_PRORE, group.by = c("seurat_clusters"), combine = FALSE, pt.size = 4, raster = FALSE, label = FALSE)
+p1010 <- lapply(X = p1010, FUN = function(x) x + theme(legend.position = "top") + guides(color = guide_legend(nrow = 3, byrow = TRUE, override.aes = list(size = 5))))
+CombinePlots(p1010)
+
+# Find all markers for the reclustered data and save to CSV
+ALTH.combined_PRORE.markers <- FindAllMarkers(ALTH.combined_PRORE, only.pos = TRUE, min.pct = 0, logfc.threshold = 0)
+write.csv(ALTH.combined_PRORE.markers, 'C:/Users/mad1188/Box/Mayur_shared_JDB/Final_mouseRNA seq data files/excel files for UMAPs cluster analysis/ALTH.combined_PRORE3.csv')
 
