@@ -25,7 +25,7 @@ Cellranger output (processed gene-counts of single cells/barcodes)
 ---------------------------------------------------
 This contains data outputs of Cellranger v3.0.1, which was run using default settings. Code used to analyze data is a part of this repository. This data contains filtered/unfiltered count files for gene expression across barcodes/cells.
 
-Data analysis of Longitudinal scRNAseq of human pancreatic slices datasets
+Data analysis of scRNAseq of mouse pancreatic slices datasets
 ----------------------------------------------------------------------------------------
 Preliminary data-analyses involving 3 groups de-identified scRNAseq of mouse pancreatic slices datasets are included in this file. This includes data thresholding, normalization, subsetting, linear dimensionality reduction (PCA), non-linear multimodal dimensionality reduction (PCA/UMAP), clustering, and data visualization.
 
