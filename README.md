@@ -3,7 +3,7 @@ In situ pharmacological induction of pancreatic beta-cell regeneration by THR-12
 
 Summary
 --------
-This repository contains coding scripts utilized for the analysis of Longitudinal scRNAseq of mouse pancreatic slices datasets. The purpose of providing the code here is to allow for transparency and robust data-analysis reproducibility. Most of the steps used for data analysis and visualization have been optimised for an average computing environment . Some analyses however, require a high-performace computing environment (see computing environment). The methodology has already been described extensively in the manuscript. However, this analysis relies heavily on powerful scRNAseq analysis algorithms developed by the Satija lab, namely Seurat (Butler et al 2018: Nature Biotechnology; Stuart et al., 2018: Cell) (for a complete list of dependencies and code utilized see analysis & visualization programs).
+This repository contains coding scripts utilized for the analysis of ScRNAseq of mouse pancreatic slices datasets. The purpose of providing the code here is to allow for transparency and robust data-analysis reproducibility. Most of the steps used for data analysis and visualization have been optimised for an average computing environment . Some analyses however, require a high-performace computing environment (see computing environment). The methodology has already been described extensively in the manuscript. However, this analysis relies heavily on powerful scRNAseq analysis algorithms developed by the Satija lab, namely Seurat (Butler et al 2018: Nature Biotechnology; Stuart et al., 2018: Cell) (for a complete list of dependencies and code utilized see analysis & visualization programs).
 
 Overall design
 ----------------
