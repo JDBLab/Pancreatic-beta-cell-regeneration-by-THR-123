@@ -86,7 +86,7 @@ Acknowledgements
 -------------------
 R01 DK138210	BMP signaling and regenerative plasticity: Correlating dynamic scRNAseq and real-time anatomical remodeling in T1D pancreatic slices  
 R01 DK130846  Single-cell longitudinal analysis of regeneration in human pancreatic slices  
-U01DK120393   HIGH-RESOLUTION CHARACTERIZATION OF HUMAN DUCTAL PROGENITOR CELLS AND THEIR REGENERATION POTENTIAL  
+U01DK120393   High-resolution characterization of human ductal progenitor cells and their regeneration potential  
 ADA award 1-19-ICTS-078, and JDRF award 3-SRA-2024-1518-S-B
 
 If this was useful to you please dont forget to cite, star and fork this repository
