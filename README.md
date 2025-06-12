@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15650762.svg)](https://doi.org/10.5281/zenodo.15650762)
+
 # Pancreatic-beta-cell-regeneration-by-THR-123
 In situ pharmacological induction of pancreatic beta-cell regeneration by THR-123, a cyclic peptide with BMP-7-like activity
 
