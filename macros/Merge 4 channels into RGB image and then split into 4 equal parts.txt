@@ -1,0 +1,57 @@
+//––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+// merge_and_split.ijm
+//––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+macro "Batch Merge & Split" {
+    // ← adjust to your paths
+    baseInputDir  = "C:/Users/mad1188/Box/THR in vivo 2023/Working Folder Layer 0";
+    baseOutputDir = baseInputDir + "/Processed";
+    File.makeDirectory(baseOutputDir);
+
+    subs = getFileList(baseInputDir);
+    for (i = 0; i < subs.length; i++) {
+        name  = subs[i];
+        inDir = baseInputDir + "/" + name;
+        if (!File.isDirectory(inDir)) continue;
+        outDir = baseOutputDir + "/" + name;
+        File.makeDirectory(outDir);
+
+        // ——— merge channels ———
+        processChannel(inDir, outDir, "CH0.tif", "dapi.tif", "Blue");
+        processChannel(inDir, outDir, "CH1.tif", "brdu.tif", "Green");
+        processChannel(inDir, outDir, "CH2.tif", "ck7.tif",  "Red");
+        processChannel(inDir, outDir, "CH3.tif", "ins.tif",  "Grays");
+
+        open(outDir + "/ck7.tif");  rename("ck7");
+        open(outDir + "/brdu.tif"); rename("brdu");
+        open(outDir + "/dapi.tif"); rename("dapi");
+        open(outDir + "/ins.tif");  rename("ins");
+        run("Merge Channels...", "c1=ck7 c2=brdu c3=dapi c4=ins create keep");
+        run("RGB Color");
+        saveAs("Tiff", outDir + "/Composite.tif");
+        run("Close All");
+
+        // ——— split into 4 tiles ———
+        open(outDir + "/Composite.tif");
+        getDimensions(width, height, channels, slices, frames);
+        tileW = width/2; tileH = height/2;
+        for (x=0; x<2; x++) {
+            for (y=0; y<2; y++) {
+                makeRectangle(x*tileW, y*tileH, tileW, tileH);
+                title = "tile_" + x + "_" + y;
+                run("Duplicate...", "title=" + title);
+                saveAs("Tiff", outDir + "/" + title + ".tif");
+                close(title);
+            }
+        }
+        close("Composite.tif");
+    }
+    print("Merge & split done!");
+}
+
+function processChannel(inDir, outDir, inName, outName, colorCmd) {
+    open(inDir + "/" + inName);
+    run(colorCmd);
+    run("Multiply...", "value=3.000");
+    saveAs("Tiff", outDir + "/" + outName);
+    close();
+}

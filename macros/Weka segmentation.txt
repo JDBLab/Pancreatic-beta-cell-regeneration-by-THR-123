@@ -1,0 +1,27 @@
+//––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+// weka_segmentation.ijm
+//––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+macro "Batch Weka Segmentation" {
+    baseDir    = "C:/Users/mad1188/Box/THR in vivo 2023/Working Folder Layer 0/Processed";
+    classifier = "C:/path/to/your/weka_classifier.model";
+
+    subs = getFileList(baseDir);
+    for (i=0; i<subs.length; i++) {
+        name   = subs[i];
+        folder = baseDir + "/" + name;
+        if (!File.isDirectory(folder)) continue;
+        comp = folder + "/Composite.tif";
+        if (!File.exists(comp)) continue;
+
+        open(comp);
+        run("Trainable Weka Segmentation", "loadClassifier=\"" + classifier + "\" imageSelection=&image");
+        waitForUser("Adjust Weka settings if needed, then click 'Segmentation > Create segmented image' and OK");
+
+        selectWindow("Segmentation");
+        rename("weka_mask");
+        saveAs("Tiff", folder + "/weka_mask.tif");
+        close("weka_mask");
+        close(comp);
+    }
+    print("Weka segmentation done!");
+}
